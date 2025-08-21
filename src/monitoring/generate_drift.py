@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import mlflow
@@ -6,10 +7,12 @@ from evidently.metric_preset import DataDriftPreset, TargetDriftPreset
 from evidently.report import Report
 
 from src.config import get_tracking_uri, load_config
+from src.logging_utils import setup_logging
 
 
 def main():
     cfg = load_config()
+    setup_logging(cfg)
     mlflow.set_tracking_uri(get_tracking_uri(cfg))
     mlflow.set_experiment(cfg.mlflow["experiment"])
 
@@ -17,14 +20,13 @@ def main():
     cur_dir = Path(cfg.paths["current_dir"])
     cur = cur_dir / "current.parquet"
     if not ref.exists() or not cur.exists():
-        error_msg = (
-            "Missing reference or current dataset. Run transform and simulate_drift."
-        )
+        error_msg = "Missing reference or current dataset. Run transform and simulate_drift."
         raise FileNotFoundError(error_msg)
 
     ref_df = pd.read_parquet(ref)
     cur_df = pd.read_parquet(cur)
 
+    log = logging.getLogger(__name__)
     with mlflow.start_run(run_name="drift-report"):
         data_report = Report(metrics=[DataDriftPreset()])
         data_report.run(reference_data=ref_df, current_data=cur_df)
@@ -40,7 +42,13 @@ def main():
 
         mlflow.log_artifact(str(data_html))
         mlflow.log_artifact(str(target_html))
-        print("[drift] saved & logged HTML reports.")
+    log.info(
+        "drift reports saved & logged",
+        extra={
+            "data_html": str(data_html),
+            "target_html": str(target_html),
+        },
+    )
 
 
 if __name__ == "__main__":

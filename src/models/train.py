@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+import platform
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -15,17 +17,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from src.config import get_tracking_uri, load_config
+from src.logging_utils import setup_logging
 
 TARGET = "duration_min"
+log = logging.getLogger(__name__)
 
 
 def load_features(cfg):
     p = Path(cfg.paths["features_out"])
     if not p.exists():
-        error_msg = (
-            "Processed features not found. Run: python -m src.features.transform"
-        )
+        error_msg = "Processed features not found. Run: python -m src.features.transform"
         raise FileNotFoundError(error_msg)
+    log.info("loading features", extra={"path": str(p)})
     return pd.read_parquet(p)
 
 
@@ -52,12 +55,14 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
 
 def main():
     cfg = load_config()
+    setup_logging(cfg)
     mlflow.set_tracking_uri(get_tracking_uri(cfg))
     mlflow.set_experiment(cfg.mlflow["experiment"])
 
     df = load_features(cfg)
     y = df[TARGET].values
     X = df.drop(columns=[TARGET])
+    log.info("split dataset", extra={"rows": len(df), "target": TARGET})
     X_train, X_tmp, y_train, y_tmp = train_test_split(
         X, y, test_size=0.2, random_state=cfg.random_state
     )
@@ -97,28 +102,36 @@ def main():
             json.dump(metrics, f, indent=2)
         mlflow.log_artifact("reports/metrics.json")
 
-        # SHAP summary (tree explainer on small sample for speed)
-        try:
-            background = X_train.sample(
-                n=min(500, len(X_train)), random_state=cfg.random_state
+        # SHAP summary (optional; disabled on Windows due to instability)
+        enable_shap = os.environ.get("ENABLE_SHAP", "1") == "1"
+        if enable_shap and platform.system() != "Windows":
+            try:
+                background = X_train.sample(n=min(500, len(X_train)), random_state=cfg.random_state)
+                # Build a fitted pipeline transformer for SHAP input
+                transformed = pipe.named_steps["prep"].fit_transform(background)
+                # Access fitted RF
+                rf = pipe.named_steps["model"]
+                explainer = shap.TreeExplainer(rf)
+                shap_values = explainer.shap_values(transformed)
+                plt.figure(figsize=(8, 4))
+                shap.summary_plot(shap_values, transformed, show=False)
+                shap_path = "reports/shap_summary.png"
+                plt.tight_layout()
+                plt.savefig(shap_path, bbox_inches="tight")
+                plt.close()
+                mlflow.log_artifact(shap_path)
+            except Exception as e:
+                with open("reports/shap_error.txt", "w") as f:
+                    f.write(str(e))
+                mlflow.log_artifact("reports/shap_error.txt")
+        else:
+            log.info(
+                "SHAP disabled",
+                extra={
+                    "platform": platform.system(),
+                    "ENABLE_SHAP": enable_shap,
+                },
             )
-            # Build a fitted pipeline transformer for SHAP input
-            transformed = pipe.named_steps["prep"].fit_transform(background)
-            # Access fitted RF
-            rf = pipe.named_steps["model"]
-            explainer = shap.TreeExplainer(rf)
-            shap_values = explainer.shap_values(transformed)
-            plt.figure(figsize=(8, 4))
-            shap.summary_plot(shap_values, transformed, show=False)
-            shap_path = "reports/shap_summary.png"
-            plt.tight_layout()
-            plt.savefig(shap_path, bbox_inches="tight")
-            plt.close()
-            mlflow.log_artifact(shap_path)
-        except Exception as e:
-            with open("reports/shap_error.txt", "w") as f:
-                f.write(str(e))
-            mlflow.log_artifact("reports/shap_error.txt")
 
         # Log full pipeline as MLflow model (Registry-ready)
         mlflow_sklearn.log_model(
@@ -127,8 +140,8 @@ def main():
             registered_model_name=None,  # registration handled by deployment stage
         )
 
-        print("[train] metrics:", metrics)
-        print("[train] run_id:", run.info.run_id)
+    log.info("training metrics", extra=metrics)
+    log.info("mlflow run", extra={"run_id": run.info.run_id})
 
 
 if __name__ == "__main__":

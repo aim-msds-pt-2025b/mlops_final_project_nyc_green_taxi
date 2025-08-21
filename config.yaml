@@ -33,3 +33,6 @@ mlflow:
   experiment: "mlops-final"
   model_name: "champion"
   # If not set by env MLFLOW_TRACKING_URI, fall back to file:./mlruns
+
+logging:
+  level: "DEBUG"

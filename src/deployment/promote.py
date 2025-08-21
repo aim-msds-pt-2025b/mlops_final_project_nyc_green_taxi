@@ -1,3 +1,4 @@
+import logging
 import os
 
 import mlflow
@@ -6,10 +7,12 @@ from mlflow.exceptions import RestException
 from mlflow.tracking import MlflowClient
 
 from src.config import get_tracking_uri, load_config
+from src.logging_utils import setup_logging
 
 
 def main():
     cfg = load_config()
+    setup_logging(cfg)
     mlflow.set_tracking_uri(get_tracking_uri(cfg))
     client = MlflowClient()
     exp = client.get_experiment_by_name(cfg.mlflow["experiment"])
@@ -22,11 +25,10 @@ def main():
 
     mae = run.data.metrics.get("mae_val", 999)
     r2 = run.data.metrics.get("r2_val", -999)
-    if (
-        mae <= cfg.validation_thresholds["mae_max"]
-        and r2 >= cfg.validation_thresholds["r2_min"]
-    ):
-        print(f"[promote] thresholds passed (mae={mae:.3f}, r2={r2:.3f})")
+    if mae <= cfg.validation_thresholds["mae_max"] and r2 >= cfg.validation_thresholds["r2_min"]:
+        logging.getLogger(__name__).info(
+            "thresholds passed", extra={"mae": round(mae, 3), "r2": round(r2, 3)}
+        )
     else:
         raise RuntimeError(f"[promote] thresholds failed (mae={mae:.3f}, r2={r2:.3f})")
 
@@ -44,15 +46,19 @@ def main():
         stage="Production",
         archive_existing_versions=True,
     )
-    print(f"[promote] Promoted {model_name} v{mv.version} to Production")
+    logging.getLogger(__name__).info(
+        "promoted to production", extra={"model": model_name, "version": mv.version}
+    )
 
     # Reload FastAPI
     api = os.environ.get("API_URL", "http://fastapi:8000")
     try:
         r = requests.post(f"{api}/reload", timeout=10)
-        print("[promote] Reload response:", r.status_code, r.text[:200])
+        logging.getLogger(__name__).info(
+            "api reload", extra={"status": r.status_code, "body": r.text[:200]}
+        )
     except Exception as e:
-        print("[promote] Reload failed:", e)
+        logging.getLogger(__name__).warning("api reload failed", extra={"error": str(e)})
 
 
 if __name__ == "__main__":

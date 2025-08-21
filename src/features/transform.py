@@ -1,10 +1,13 @@
+import logging
 from pathlib import Path
 
 import pandas as pd
 
 from src.config import load_config
+from src.logging_utils import setup_logging
 
 TARGET = "duration_min"
+log = logging.getLogger(__name__)
 
 
 def compute_duration(df: pd.DataFrame) -> pd.DataFrame:
@@ -16,11 +19,14 @@ def compute_duration(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def engineer(df: pd.DataFrame, cfg) -> pd.DataFrame:
+    log.debug("engineering start", extra={"rows": len(df), "cols": list(df.columns)})
     df = compute_duration(df)
     min_dur = cfg.features["min_duration_min"]
     max_dur = cfg.features["max_duration_min"]
     df = df[(df[TARGET] >= min_dur) & (df[TARGET] <= max_dur)]
-    df = df[df.get("trip_distance", 0) >= 0]
+    if "trip_distance" in df.columns:
+        mask = df["trip_distance"] >= 0
+        df = df[mask]
     dt = pd.to_datetime(df["lpep_pickup_datetime"])
     df["hour"] = dt.dt.hour
     df["day_of_week"] = dt.dt.dayofweek
@@ -39,16 +45,17 @@ def engineer(df: pd.DataFrame, cfg) -> pd.DataFrame:
 
 def main():
     cfg = load_config()
+    setup_logging(cfg)
     raw_dir = Path(cfg.paths["raw_dir"])
     files = list(raw_dir.glob("*.parquet"))
     if not files:
-        raise FileNotFoundError(
-            "No raw parquet found. Run: python -m src.data.get_data"
-        )
+        raise FileNotFoundError("No raw parquet found. Run: python -m src.data.get_data")
+    log.info("reading raw parquet", extra={"path": str(files[0])})
     df = pd.read_parquet(files[0])
     # optional downsample
     frac = float(cfg.data.get("sample_fraction", 1.0))
     if 0 < frac < 1.0:
+        log.info("downsampling", extra={"frac": frac})
         df = df.sample(frac=frac, random_state=cfg.random_state)
     out_path = Path(cfg.paths["features_out"])
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +65,14 @@ def main():
     Path(cfg.paths["reference_path"]).parent.mkdir(parents=True, exist_ok=True)
     features.to_parquet(cfg.paths["reference_path"], index=False)
     ref_path = cfg.paths["reference_path"]
-    print(f"[transform] Wrote features to {out_path} and reference to {ref_path}")
+    log.info(
+        "wrote features and reference",
+        extra={
+            "features_path": str(out_path),
+            "reference_path": str(ref_path),
+            "rows": len(features),
+        },
+    )
     return str(out_path)
 
 
