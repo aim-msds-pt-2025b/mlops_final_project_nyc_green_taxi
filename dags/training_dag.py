@@ -1,12 +1,12 @@
+# Callables import our project modules mounted at /opt/airflow/src
+import sys
 from datetime import datetime, timedelta
-import os
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-# Callables import our project modules mounted at /opt/airflow/src
-import sys
-sys.path.append('/opt/airflow')
-sys.path.append('/opt/airflow/src')
+sys.path.append("/opt/airflow")
+sys.path.append("/opt/airflow/src")
 
 from src.data.get_data import main as get_data_main
 from src.features.transform import main as transform_main
@@ -28,7 +28,6 @@ with DAG(
     catchup=False,
     description="Daily training pipeline: ingest -> transform -> train -> validate",
 ) as dag:
-
     t_ingest = PythonOperator(task_id="ingest", python_callable=get_data_main)
     t_transform = PythonOperator(task_id="transform", python_callable=transform_main)
     t_train = PythonOperator(task_id="train", python_callable=train_main)

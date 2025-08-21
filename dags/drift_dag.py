@@ -1,8 +1,10 @@
+import sys
 from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import sys
-sys.path.append('/opt/airflow/src')
+
+sys.path.append("/opt/airflow/src")
 
 from src.data.simulate_drift import main as simulate_drift_main
 from src.monitoring.generate_drift import main as drift_report_main
@@ -17,7 +19,6 @@ with DAG(
     catchup=False,
     description="Hourly drift simulation & reporting with Evidently",
 ) as dag:
-
     t_simulate = PythonOperator(task_id="simulate_current", python_callable=simulate_drift_main)
     t_drift = PythonOperator(task_id="generate_drift_reports", python_callable=drift_report_main)
 

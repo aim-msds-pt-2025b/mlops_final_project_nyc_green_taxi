@@ -1,9 +1,10 @@
+import sys
 from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import os
-import sys
-sys.path.append('/opt/airflow/src')
+
+sys.path.append("/opt/airflow/src")
 
 from src.deployment.promote import main as promote_main
 
@@ -17,7 +18,6 @@ with DAG(
     catchup=False,
     description="Register & promote model to Production if thresholds pass; trigger API reload",
 ) as dag:
-
     t_promote = PythonOperator(task_id="promote_and_reload", python_callable=promote_main)
 
     t_promote

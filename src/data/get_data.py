@@ -1,6 +1,9 @@
 from pathlib import Path
+
 import requests
+
 from src.config import load_config
+
 
 def download_file(url: str, out_path: Path, chunk: int = 1 << 20):
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -10,6 +13,7 @@ def download_file(url: str, out_path: Path, chunk: int = 1 << 20):
             for part in r.iter_content(chunk_size=chunk):
                 if part:
                     f.write(part)
+
 
 def main():
     cfg = load_config()
@@ -23,6 +27,7 @@ def main():
     download_file(url, out)
     print(f"[data] Saved: {out} ({out.stat().st_size/1e6:.2f} MB)")
     return str(out)
+
 
 if __name__ == "__main__":
     main()

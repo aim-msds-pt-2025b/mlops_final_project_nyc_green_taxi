@@ -1,6 +1,9 @@
+import os
 from dataclasses import dataclass
 from typing import Any, Dict
-import yaml, os
+
+import yaml
+
 
 @dataclass
 class Config:
@@ -13,10 +16,12 @@ class Config:
     validation_thresholds: Dict[str, Any]
     mlflow: Dict[str, Any]
 
+
 def load_config(path: str = "config.yaml") -> Config:
     with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return Config(**cfg)
+
 
 def get_tracking_uri(cfg: Config) -> str:
     return os.environ.get("MLFLOW_TRACKING_URI", f"file:{cfg.paths['mlruns_dir']}")

@@ -1,15 +1,16 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
-import os
+from typing import Optional
+
 import mlflow
+import pandas as pd
+from fastapi import FastAPI, HTTPException
 from mlflow.pyfunc import load_model
 from mlflow.tracking import MlflowClient
-import pandas as pd
+from pydantic import BaseModel, Field
 
-from src.config import load_config, get_tracking_uri
+from src.config import get_tracking_uri, load_config
 
 app = FastAPI(title="MLOps Final — Model API")
+
 
 class InputData(BaseModel):
     trip_distance: float = Field(..., ge=0)
@@ -20,8 +21,10 @@ class InputData(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     payment_type: int
 
+
 _model = None
 _cfg = load_config()
+
 
 def _load_champion():
     global _model
@@ -35,19 +38,23 @@ def _load_champion():
         _model = None
         return False
 
+
 @app.on_event("startup")
 def startup_event():
     _load_champion()
 
+
 @app.get("/health")
 def health():
     return {"status": "ok" if _model is not None else "no-model"}
+
 
 @app.post("/reload")
 def reload_model():
     if not _load_champion():
         raise HTTPException(status_code=503, detail="Champion not available")
     return {"status": "reloaded"}
+
 
 @app.post("/predict")
 def predict(x: InputData):
@@ -60,6 +67,7 @@ def predict(x: InputData):
         return {"prediction": val}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.get("/model")
 def model_info():
@@ -78,7 +86,6 @@ def model_info():
     # simple "important features" via model attribute names (if sklearn pipeline)
     important = []
     try:
-        import sklearn
         # Try to extract feature names after OHE
         # If not available, return input schema keys
         important = list(schema.keys())

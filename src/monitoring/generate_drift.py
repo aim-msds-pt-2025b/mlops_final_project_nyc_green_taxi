@@ -1,11 +1,12 @@
-import os
 from pathlib import Path
-import pandas as pd
-import mlflow
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset, TargetDriftPreset
 
-from src.config import load_config, get_tracking_uri
+import mlflow
+import pandas as pd
+from evidently.metric_preset import DataDriftPreset, TargetDriftPreset
+from evidently.report import Report
+
+from src.config import get_tracking_uri, load_config
+
 
 def main():
     cfg = load_config()
@@ -16,7 +17,10 @@ def main():
     cur_dir = Path(cfg.paths["current_dir"])
     cur = cur_dir / "current.parquet"
     if not ref.exists() or not cur.exists():
-        raise FileNotFoundError("Missing reference or current dataset. Run transform and simulate_drift.")
+        error_msg = (
+            "Missing reference or current dataset. Run transform and simulate_drift."
+        )
+        raise FileNotFoundError(error_msg)
 
     ref_df = pd.read_parquet(ref)
     cur_df = pd.read_parquet(cur)
@@ -37,6 +41,7 @@ def main():
         mlflow.log_artifact(str(data_html))
         mlflow.log_artifact(str(target_html))
         print("[drift] saved & logged HTML reports.")
+
 
 if __name__ == "__main__":
     main()
