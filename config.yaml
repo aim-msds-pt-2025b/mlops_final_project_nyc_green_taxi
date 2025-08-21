@@ -1,0 +1,35 @@
+random_state: 42
+n_jobs: -1
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  reference_path: "data/reference.parquet"
+  current_dir: "data/current"
+  features_out: "data/processed/features.parquet"
+  mlruns_dir: "mlruns"
+
+data:
+  url: "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2024-01.parquet"
+  sample_fraction: 0.2
+
+features:
+  min_duration_min: 1
+  max_duration_min: 120
+
+model:
+  type: "RandomForestRegressor"
+  hyperparams:
+    n_estimators: 150
+    max_depth: 20
+    min_samples_split: 4
+    min_samples_leaf: 2
+
+validation_thresholds:
+  mae_max: 8.5
+  r2_min: 0.35
+
+mlflow:
+  experiment: "mlops-final"
+  model_name: "champion"
+  # If not set by env MLFLOW_TRACKING_URI, fall back to file:./mlruns
