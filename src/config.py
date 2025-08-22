@@ -19,8 +19,9 @@ class Config:
     logging: Dict[str, Any] = field(default_factory=dict)
 
 
-def load_config(path: str = "config.yaml") -> Config:
-    with open(path, "r", encoding="utf-8") as f:
+def load_config(path: str | None = None) -> Config:
+    cfg_path = path or os.environ.get("CONFIG_PATH", "config.yaml")
+    with open(cfg_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return Config(**cfg)
 

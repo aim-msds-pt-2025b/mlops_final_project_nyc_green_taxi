@@ -5,10 +5,13 @@ services:
       POSTGRES_USER: mlflow
       POSTGRES_PASSWORD: mlflow
       POSTGRES_DB: mlflow
+      POSTGRES_MULTIPLE_DATABASES: airflow
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
+    restart: unless-stopped
 
   mlflow:
     build:
@@ -24,6 +27,7 @@ services:
       - mlflow_artifacts:/mlflow_artifacts
     depends_on:
       - postgres
+    restart: unless-stopped
 
   fastapi:
     build:
@@ -37,16 +41,51 @@ services:
       - ./artifacts:/app/artifacts
       - ./config.yaml:/app/config.yaml:ro
       - ./src:/app/src
+      - mlflow_artifacts:/mlflow_artifacts
     depends_on:
       - mlflow
+    restart: unless-stopped
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    command: >
+      bash -c "
+      airflow db init &&
+      airflow users create
+      --username admin
+      --firstname Admin
+      --lastname User
+      --role Admin
+      --email admin@example.com
+      --password admin
+      "
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql://airflow:airflow@postgres:5432/airflow"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./config.yaml:/opt/airflow/config.yaml:ro
+      - mlflow_artifacts:/mlflow_artifacts
+    depends_on:
+      - postgres
+    restart: "no"
 
   airflow-webserver:
     build:
       context: .
       dockerfile: docker/airflow.Dockerfile
+    command: ["airflow", "webserver", "--port", "8080"]
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__RBAC: "true"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql://airflow:airflow@postgres:5432/airflow"
       MLFLOW_TRACKING_URI: http://mlflow:5000
     ports:
       - "8080:8080"
@@ -55,8 +94,11 @@ services:
       - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
       - ./config.yaml:/opt/airflow/config.yaml:ro
+      - mlflow_artifacts:/mlflow_artifacts
     depends_on:
+      - airflow-init
       - mlflow
+    restart: unless-stopped
 
   airflow-scheduler:
     build:
@@ -65,14 +107,19 @@ services:
     command: ["airflow", "scheduler"]
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql://airflow:airflow@postgres:5432/airflow"
       MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
       - ./dags:/opt/airflow/dags
       - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
       - ./config.yaml:/opt/airflow/config.yaml:ro
+      - mlflow_artifacts:/mlflow_artifacts
     depends_on:
+      - airflow-init
       - airflow-webserver
+    restart: unless-stopped
 
 volumes:
   pgdata:

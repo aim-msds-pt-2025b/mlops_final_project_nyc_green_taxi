@@ -5,8 +5,9 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-sys.path.append("/opt/airflow")
-sys.path.append("/opt/airflow/src")
+# Add src to Python path
+sys.path.insert(0, "/opt/airflow/src")
+sys.path.insert(0, "/opt/airflow")
 
 from src.data.get_data import main as get_data_main
 from src.features.transform import main as transform_main

@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import platform
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -102,41 +101,68 @@ def main():
             json.dump(metrics, f, indent=2)
         mlflow.log_artifact("reports/metrics.json")
 
-        # SHAP summary (optional; disabled on Windows due to instability)
+        # SHAP summary (enabled for all platforms)
         enable_shap = os.environ.get("ENABLE_SHAP", "1") == "1"
-        if enable_shap and platform.system() != "Windows":
+        if enable_shap:
             try:
-                background = X_train.sample(n=min(500, len(X_train)), random_state=cfg.random_state)
-                # Build a fitted pipeline transformer for SHAP input
-                transformed = pipe.named_steps["prep"].fit_transform(background)
-                # Access fitted RF
+                log.info("Generating SHAP summary plot...")
+
+                # Use a smaller sample for SHAP calculation
+                sample_size = min(100, len(X_train))
+                background = X_train.sample(n=sample_size, random_state=cfg.random_state)
+                log.info(f"Using {sample_size} samples for SHAP calculation")
+
+                # Transform the sample through the preprocessing pipeline
+                transformed = pipe.named_steps["prep"].transform(background)
+                log.info(f"Transformed sample shape: {transformed.shape}")
+
+                # Access fitted RF model
                 rf = pipe.named_steps["model"]
+                log.info(f"Model type: {type(rf)}")
+
+                # Create explainer and compute SHAP values
                 explainer = shap.TreeExplainer(rf)
+                log.info("TreeExplainer created successfully")
+
                 shap_values = explainer.shap_values(transformed)
-                plt.figure(figsize=(8, 4))
-                shap.summary_plot(shap_values, transformed, show=False)
+                log.info(f"SHAP values computed, shape: {shap_values.shape}")
+
+                # Use matplotlib backend that works on Windows
+                import matplotlib
+
+                matplotlib.use("Agg")
+                plt.figure(figsize=(10, 6))
+                shap.summary_plot(shap_values, transformed, show=False, plot_type="bar")
                 shap_path = "reports/shap_summary.png"
+                os.makedirs("reports", exist_ok=True)
                 plt.tight_layout()
-                plt.savefig(shap_path, bbox_inches="tight")
+                plt.savefig(shap_path, bbox_inches="tight", dpi=100)
                 plt.close()
                 mlflow.log_artifact(shap_path)
+                log.info("SHAP summary plot generated and logged")
             except Exception as e:
+                log.warning(f"SHAP generation failed: {str(e)}")
+                log.warning(f"Error type: {type(e).__name__}")
+                import traceback
+
+                log.warning(f"Full traceback: {traceback.format_exc()}")
+                os.makedirs("reports", exist_ok=True)
                 with open("reports/shap_error.txt", "w") as f:
-                    f.write(str(e))
+                    f.write(f"SHAP error: {str(e)}\n")
+                    f.write(f"Error type: {type(e).__name__}\n")
+                    f.write(f"Traceback:\n{traceback.format_exc()}")
                 mlflow.log_artifact("reports/shap_error.txt")
         else:
-            log.info(
-                "SHAP disabled",
-                extra={
-                    "platform": platform.system(),
-                    "ENABLE_SHAP": enable_shap,
-                },
-            )
+            log.info("SHAP disabled via ENABLE_SHAP=0")
+
+        # Prepare input example and signature for MLflow model logging
+        input_example = X_train.head(3)  # Use first 3 rows as example
 
         # Log full pipeline as MLflow model (Registry-ready)
         mlflow_sklearn.log_model(
             sk_model=pipe,
             artifact_path="model",
+            input_example=input_example,
             registered_model_name=None,  # registration handled by deployment stage
         )
 

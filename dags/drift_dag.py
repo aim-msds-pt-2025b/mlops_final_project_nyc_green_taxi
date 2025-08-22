@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-sys.path.append("/opt/airflow/src")
+# Add src to Python path
+sys.path.insert(0, "/opt/airflow/src")
+sys.path.insert(0, "/opt/airflow")
 
 from src.data.simulate_drift import main as simulate_drift_main
 from src.monitoring.generate_drift import main as drift_report_main

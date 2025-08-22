@@ -42,14 +42,14 @@ def _load_champion():
     name = _cfg.mlflow["model_name"]
     try:
         _model = load_model(f"models:/{name}/Production")
-        log.info("loaded champion", extra={"name": name, "stage": "Production"})
+        log.info("loaded champion", extra={"model_name": name, "stage": "Production"})
         return True
     except (MlflowException, RestException, FileNotFoundError) as exc:
         # Fallback to local artifacts (optional): not needed if registry exists
         _model = None
         log.warning(
             "no champion in registry; model unset",
-            extra={"name": name, "error": str(exc)},
+            extra={"model_name": name, "error": str(exc)},
         )
         return False
 
@@ -77,6 +77,16 @@ def predict(x: InputData):
     if _model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     df = pd.DataFrame([x.dict()])
+
+    # Ensure proper data types to match MLflow schema expectations
+    # Based on the schema error messages, we need specific types:
+    df["passenger_count"] = df["passenger_count"].astype("float64")  # double
+    df["payment_type"] = df["payment_type"].astype("float64")  # double
+    df["PULocationID"] = df["PULocationID"].astype("int32")  # int32
+    df["DOLocationID"] = df["DOLocationID"].astype("int32")  # int32
+    df["hour"] = df["hour"].astype("int32")  # int32
+    df["day_of_week"] = df["day_of_week"].astype("int32")  # int32
+
     try:
         y = _model.predict(df)
         val = float(y[0]) if hasattr(y, "__len__") else float(y)
