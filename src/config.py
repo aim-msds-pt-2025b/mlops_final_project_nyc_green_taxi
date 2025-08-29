@@ -39,8 +39,8 @@ def get_log_level(cfg: Config | None = None) -> int:
     elif cfg and isinstance(cfg.logging, dict):
         level_str = cfg.logging.get("level")
     if not level_str:
-        return logging.DEBUG
+        return logging.INFO
     try:
         return getattr(logging, level_str.upper())
     except AttributeError:
-        return logging.DEBUG
+        return logging.INFO
