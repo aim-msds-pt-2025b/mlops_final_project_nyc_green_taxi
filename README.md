@@ -90,44 +90,65 @@ Endpoints:
 
 ## 🚀 Quickstart
 
-### Local Development
+### Clone and Setup:
 
-1. **Setup Environment**:
 ```bash
 git clone <this_repo>
 cd mlops_final_project_nyc_green_taxi
 uv sync  # or pip install -r requirements.txt
 ```
 
-2. **Start MLflow Server**:
+### Containerized Deployment using Airflow for Orchestration
+
+In order to access logs from the Airflow WebUI, set an secret key in the `.env` file like so:
 ```bash
-mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts --host 0.0.0.0 --port 5000
+echo AIRFLOW_SECRET_KEY=my-secret >> .env
 ```
-
-3. **Run Complete Pipeline**:
+On Linux, you should also set the UID with
 ```bash
-python src/models/train.py            # Train model + log to MLflow
-python src/monitoring/generate_drift.py  # Generate drift report
-python src/deployment/promote.py     # Promote model to "Production"
+echo "AIRFLOW_UID=$(id -u)" >> .env
 ```
-
-4. **Start API Server**:
-```bash
-python src/serve/app.py              # Start FastAPI server (port 8000)
-python src/serve/sample_request.py   # Test with sample requests
-```
-
-### Docker Production Deployment
-
-Launch all services with one command:
+Then build and launch all services with:
 ```bash
 docker-compose up --build
 ```
 
 **Services Available**:
+- **Airflow UI**: http://localhost:8080 (orchestration, DAG execution)
 - **MLflow UI**: http://localhost:5000 (experiment tracking, model registry)
 - **FastAPI API**: http://localhost:8000 (model serving with docs at /docs)
 - **PostgreSQL**: localhost:5432 (persistent storage)
+
+Once the services have all been created (verify this with `docker compose ps`), trigger the deployment with
+```bash
+docker compose exec airflow-scheduler airflow dags trigger deployment_dag
+```
+You should then be able to verify that the model serving API is healthy (at `http://localhost:8000/health`) and query it with
+```bash
+python -m src.serve.sample_request
+```
+
+
+### Local Development
+
+1. **Start MLflow Server**:
+```bash
+mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts --host 0.0.0.0 --port 5000
+export MLFLOW_TRACKING_URI=http://localhost:5000
+```
+
+2. **Run Complete Pipeline**:
+```bash
+python -m src.models.train            # Train model + log to MLflow
+python -m src.monitoring.generate_drift  # Generate drift report
+python -m src.deployment.promote     # Promote model to "Production"
+```
+
+3. **Start API Server**:
+```bash
+python -m src.serve.app              # Start FastAPI server (port 8000)
+python -m src.serve.sample_request   # Test with sample requests
+```
 
 ## 📈 Pipeline Results
 
