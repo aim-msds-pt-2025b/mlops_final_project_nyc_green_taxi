@@ -16,6 +16,13 @@ x-airflow-common:
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:
+  mlflow_artifacts-init:
+    image: alpine
+    command: ["chmod", "o+w", "/mlflow_artifacts"]
+    volumes:
+      - mlflow_artifacts:/mlflow_artifacts
+    restart: no
+
   postgres:
     image: postgres:15
     environment:
@@ -81,6 +88,7 @@ services:
       "
     depends_on:
       - postgres
+      - mlflow_artifacts-init
     restart: "no"
 
   airflow-webserver:
